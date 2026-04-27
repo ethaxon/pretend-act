@@ -25,6 +25,7 @@ export async function createGithubSandbox(
 		await copyWorkspace({
 			sourcePath: path.resolve(options.workspacePath, file.src),
 			destinationPath: path.resolve(repoPath, file.dest ?? "."),
+			workspacePath: path.resolve(options.workspacePath),
 			filter: {
 				...options.workspaceFilter,
 				ignore: [

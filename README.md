@@ -20,10 +20,10 @@ Existing projects such as `act-js` and `mock-github` showed how useful a program
 ## Install
 
 ```sh
-pnpm add -D pretend-act yaml ignore
+pnpm add -D pretend-act yaml
 ```
 
-`yaml` and `ignore` are optional peers because only the GitHub workflow overlay and workspace-copy modules need them. Root imports stay lightweight.
+`yaml` is an optional peer because only the GitHub workflow overlay module needs it. Root imports stay lightweight.
 
 ## Subpath Imports
 

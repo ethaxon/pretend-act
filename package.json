@@ -8,56 +8,69 @@
 		"dist",
 		"README.md",
 		"README_zh.md",
-		"docs"
+		"docs",
+		"LICENSE.md",
+		"CHANGELOG.md"
 	],
 	"exports": {
 		".": {
+			"dev": "./src/index.ts",
 			"import": "./dist/index.mjs",
 			"types": "./dist/index.d.mts"
 		},
 		"./github": {
+			"dev": "./src/github/index.ts",
 			"import": "./dist/github/index.mjs",
 			"types": "./dist/github/index.d.mts"
 		},
 		"./github-core": {
+			"dev": "./src/github-core/index.ts",
 			"import": "./dist/github-core/index.mjs",
 			"types": "./dist/github-core/index.d.mts"
 		},
 		"./github-artifacts": {
+			"dev": "./src/github-artifacts/index.ts",
 			"import": "./dist/github-artifacts/index.mjs",
 			"types": "./dist/github-artifacts/index.d.mts"
 		},
 		"./github-registry": {
+			"dev": "./src/github-registry/index.ts",
 			"import": "./dist/github-registry/index.mjs",
 			"types": "./dist/github-registry/index.d.mts"
 		},
 		"./git-registry": {
+			"dev": "./src/git-registry/index.ts",
 			"import": "./dist/git-registry/index.mjs",
 			"types": "./dist/git-registry/index.d.mts"
 		},
 		"./npm-registry": {
+			"dev": "./src/npm-registry/index.ts",
 			"import": "./dist/npm-registry/index.mjs",
 			"types": "./dist/npm-registry/index.d.mts"
 		},
 		"./crates-registry": {
+			"dev": "./src/crates-registry/index.ts",
 			"import": "./dist/crates-registry/index.mjs",
 			"types": "./dist/crates-registry/index.d.mts"
 		},
 		"./docker-registry": {
+			"dev": "./src/docker-registry/index.ts",
 			"import": "./dist/docker-registry/index.mjs",
 			"types": "./dist/docker-registry/index.d.mts"
 		},
 		"./npm": {
+			"dev": "./src/npm/index.ts",
 			"import": "./dist/npm/index.mjs",
 			"types": "./dist/npm/index.d.mts"
 		},
 		"./crates": {
+			"dev": "./src/crates/index.ts",
 			"import": "./dist/crates/index.mjs",
 			"types": "./dist/crates/index.d.mts"
 		}
 	},
 	"engines": {
-		"node": ">=22.12"
+		"node": ">=24.4.0"
 	},
 	"scripts": {
 		"prepare": "prek install",
@@ -67,13 +80,18 @@
 		"test": "vitest run",
 		"test-watch": "vitest",
 		"build": "tsdown",
-		"dev": "tsdown --watch"
+		"dev": "tsdown --watch",
+		"publish": "pnpm publish --access public"
 	},
 	"keywords": [
 		"github-actions",
 		"act",
 		"testing",
-		"mock-github",
+		"mock",
+		"github",
+		"npm",
+		"crates",
+		"docker",
 		"workflow"
 	],
 	"author": "Zhou Yeheng <root@aitiotekt.com>",
@@ -85,18 +103,17 @@
 		"@octokit/core": "^7.0.6",
 		"@platformatic/vfs": "^0.4.0",
 		"@types/node": "^25.6.0",
-		"ignore": "^7.0.5",
 		"isomorphic-git": "^1.37.6",
 		"tsdown": "^0.21.10",
-		"typescript": "^6.0.3",
+		"typescript": "^5.9.3",
 		"verdaccio": "^6.2.1",
+		"vite-tsconfig-paths": "^6.1.1",
 		"vitest": "^4.1.5",
 		"yaml": "^2.8.1"
 	},
 	"peerDependencies": {
 		"@octokit/core": "^7.0.0",
 		"@platformatic/vfs": "^0.4.0",
-		"ignore": "^7.0.0",
 		"isomorphic-git": "^1.0.0",
 		"verdaccio": "^6.0.0",
 		"yaml": "^2.0.0"
@@ -120,5 +137,8 @@
 		"yaml": {
 			"optional": true
 		}
+	},
+	"overrides": {
+		"typescript": "6.0.3"
 	}
 }

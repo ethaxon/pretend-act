@@ -1,0 +1,22 @@
+{
+	"extends": "./tsconfig.base.json",
+	"compilerOptions": {
+		"outDir": "./dist-tsc/specs",
+		"types": ["node"],
+		"paths": {
+			"pretend-act": ["./src/index.ts"],
+			"pretend-act/*": ["./src/*"]
+		}
+	},
+	"include": [
+		"examples",
+		"**/*.spec.ts",
+		"**/*.test.ts",
+		"**/__tests__/**/*.ts"
+	],
+	"references": [
+		{
+			"path": "./tsconfig.lib.json"
+		}
+	]
+}

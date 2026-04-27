@@ -4,5 +4,6 @@
 		"outDir": "./dist-tsc/lib",
 		"types": ["node"]
 	},
-	"include": ["src"]
+	"include": ["src/**/*"],
+	"exclude": ["**/*.spec.ts", "**/*.test.ts", "**/__tests__/**"]
 }

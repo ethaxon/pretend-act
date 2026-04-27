@@ -1,6 +1,8 @@
 {
 	"compilerOptions": {
 		"composite": true,
+		"target": "ES2022",
+		"lib": ["ES2022"],
 		"module": "preserve",
 		"moduleResolution": "bundler",
 		"forceConsistentCasingInFileNames": true,
@@ -10,6 +12,7 @@
 		"noFallthroughCasesInSwitch": true,
 		"resolveJsonModule": true,
 		"noPropertyAccessFromIndexSignature": false,
-		"emitDeclarationOnly": true
+		"emitDeclarationOnly": true,
+		"customConditions": ["dev"]
 	}
 }

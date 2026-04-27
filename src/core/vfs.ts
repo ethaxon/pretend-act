@@ -3,15 +3,16 @@ import os from "node:os";
 import path from "node:path";
 
 import { PretendActError } from "./errors";
-import { createTempDirectory, safeJoin } from "./fs";
+import {
+	createDisposableTempDirectory,
+	type DisposableTempDirectory,
+	safeJoin,
+} from "./fs";
 import { importOptionalPeer } from "./optional-peer";
 
 export type FileSystemBackendKind = "real" | "memory" | "overlay";
 
-export type MaterializedPath = {
-	path: string;
-	dispose(): Promise<void>;
-};
+export type MaterializedPath = DisposableTempDirectory;
 
 export type FileSystemBackend = {
 	kind: FileSystemBackendKind;
@@ -82,18 +83,10 @@ export async function createMemoryFileSystemBackend(): Promise<FileSystemBackend
 			return path.posix.resolve(rootPath, ...parts);
 		},
 		async materialize(options = {}) {
-			const directory = await createTempDirectory(
+			return createDisposableTempDirectory(
 				options.prefix ?? "pretend-act-vfs-",
 				os.tmpdir(),
 			);
-			return {
-				path: directory,
-				async dispose() {
-					await import("node:fs/promises").then((fs) =>
-						fs.rm(directory, { recursive: true, force: true }),
-					);
-				},
-			};
 		},
 		dispose() {
 			vfs.unmount?.();

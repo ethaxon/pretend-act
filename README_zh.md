@@ -20,10 +20,10 @@ Pretend Act 是一个基于 [`nektos/act`](https://github.com/nektos/act) 的现
 ## 安装
 
 ```sh
-pnpm add -D pretend-act yaml ignore
+pnpm add -D pretend-act yaml
 ```
 
-`yaml` 和 `ignore` 是 optional peer，因为只有 GitHub workflow overlay 和 workspace copy 模块需要它们。根入口保持轻量。
+`yaml` 是 optional peer，因为只有 GitHub workflow overlay 模块需要它。根入口保持轻量。
 
 ## Subpath Imports
 

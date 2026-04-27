@@ -1,18 +1,23 @@
-set dotenv-load
+set dotenv-load := true
+set windows-shell := ["pwsh.exe", "-NoLogo", "-ExecutionPolicy", "RemoteSigned", "-Command"]
+
+setup:
+	mise install
+	pnpm install
 
 lint:
-	mise exec --command "pnpm lint"
+	pnpm lint
 
-lint-fix:
-	mise exec --command "pnpm lint-fix"
+fix:
+	pnpm lint-fix
 
 typecheck:
-	mise exec --command "pnpm typecheck"
+	pnpm typecheck
 
 test:
-	mise exec --command "pnpm test"
+	pnpm test
 
 build:
-	mise exec --command "pnpm build"
+	pnpm build
 
 verify: lint typecheck test build

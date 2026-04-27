@@ -5,13 +5,17 @@ import path from "node:path";
 import git from "isomorphic-git";
 import { describe, expect, it } from "vitest";
 
-import { createTempDirectory } from "../core/index";
+import {
+	createDisposableTempDirectory,
+	type DisposableTempDirectory,
+} from "../core/index";
 import { createCheckoutMockStep, createGitRegistry } from "./index";
 
 describe("git registry", () => {
 	it("creates a snapshot remote with dirty, untracked, and deleted files", async () => {
-		const workspacePath = await createFixtureRepository();
+		const workspace = await createFixtureRepository();
 		try {
+			const workspacePath = workspace.path;
 			await writeFile(path.join(workspacePath, "tracked.txt"), "dirty\n");
 			await writeFile(path.join(workspacePath, "new.txt"), "new\n");
 			await rm(path.join(workspacePath, "deleted.txt"));
@@ -26,30 +30,35 @@ describe("git registry", () => {
 						ref: registry.fetchRef,
 					}),
 				).toBe(registry.checkoutSha);
-				const checkoutPath = await checkoutRegistry(
+				const checkout = await checkoutRegistry(
 					registry.gitdir,
 					registry.checkoutSha,
 				);
-				expect(
-					await readFile(path.join(checkoutPath, "tracked.txt"), "utf8"),
-				).toBe("dirty\n");
-				expect(await readFile(path.join(checkoutPath, "new.txt"), "utf8")).toBe(
-					"new\n",
-				);
-				await expect(
-					readFile(path.join(checkoutPath, "deleted.txt"), "utf8"),
-				).rejects.toMatchObject({ code: "ENOENT" });
+				try {
+					expect(
+						await readFile(path.join(checkout.path, "tracked.txt"), "utf8"),
+					).toBe("dirty\n");
+					expect(
+						await readFile(path.join(checkout.path, "new.txt"), "utf8"),
+					).toBe("new\n");
+					await expect(
+						readFile(path.join(checkout.path, "deleted.txt"), "utf8"),
+					).rejects.toMatchObject({ code: "ENOENT" });
+				} finally {
+					await checkout.remove();
+				}
 			} finally {
 				await registry.stop();
 			}
 		} finally {
-			await rm(workspacePath, { force: true, recursive: true });
+			await workspace.remove();
 		}
 	});
 
 	it("publishes an explicit commit without dirty workspace changes", async () => {
-		const workspacePath = await createFixtureRepository();
+		const workspace = await createFixtureRepository();
 		try {
+			const workspacePath = workspace.path;
 			const sourceSha = await git.resolveRef({
 				fs: nodeFs,
 				dir: workspacePath,
@@ -67,27 +76,31 @@ describe("git registry", () => {
 						ref: registry.fetchRef,
 					}),
 				).toBe(sourceSha);
-				const checkoutPath = await checkoutRegistry(
+				const checkout = await checkoutRegistry(
 					registry.gitdir,
 					registry.checkoutSha,
 				);
-				expect(
-					await readFile(path.join(checkoutPath, "tracked.txt"), "utf8"),
-				).toBe("clean\n");
+				try {
+					expect(
+						await readFile(path.join(checkout.path, "tracked.txt"), "utf8"),
+					).toBe("clean\n");
+				} finally {
+					await checkout.remove();
+				}
 			} finally {
 				await registry.stop();
 			}
 		} finally {
-			await rm(workspacePath, { force: true, recursive: true });
+			await workspace.remove();
 		}
 	});
 
 	it("serves a registry through optional HTTP transport", async () => {
-		const workspacePath = await createFixtureRepository();
+		const workspace = await createFixtureRepository();
 		try {
 			const registry = await createGitRegistry({
 				transport: "http",
-				workspacePath,
+				workspacePath: workspace.path,
 			});
 			try {
 				expect(registry.transport).toBe("http");
@@ -111,7 +124,7 @@ describe("git registry", () => {
 				await registry.stop();
 			}
 		} finally {
-			await rm(workspacePath, { force: true, recursive: true });
+			await workspace.remove();
 		}
 	});
 
@@ -128,8 +141,11 @@ describe("git registry", () => {
 	});
 });
 
-async function createFixtureRepository(): Promise<string> {
-	const workspacePath = await createTempDirectory("pretend-act-git-fixture-");
+async function createFixtureRepository(): Promise<DisposableTempDirectory> {
+	const workspace = await createDisposableTempDirectory(
+		"pretend-act-git-fixture-",
+	);
+	const workspacePath = workspace.path;
 	await git.init({ defaultBranch: "main", dir: workspacePath, fs: nodeFs });
 	await mkdir(path.join(workspacePath, "src"), { recursive: true });
 	await writeFile(path.join(workspacePath, "tracked.txt"), "clean\n");
@@ -144,17 +160,22 @@ async function createFixtureRepository(): Promise<string> {
 		fs: nodeFs,
 		message: "initial",
 	});
-	return workspacePath;
+	return workspace;
 }
 
-async function checkoutRegistry(gitdir: string, ref: string): Promise<string> {
-	const checkoutPath = await createTempDirectory("pretend-act-git-checkout-");
+async function checkoutRegistry(
+	gitdir: string,
+	ref: string,
+): Promise<DisposableTempDirectory> {
+	const checkout = await createDisposableTempDirectory(
+		"pretend-act-git-checkout-",
+	);
 	await git.checkout({
-		dir: checkoutPath,
+		dir: checkout.path,
 		force: true,
 		fs: nodeFs,
 		gitdir,
 		ref,
 	});
-	return checkoutPath;
+	return checkout;
 }

@@ -1,8 +1,8 @@
-import { readFile } from "node:fs/promises";
+import nodeFs from "node:fs";
+import { lstat, readdir } from "node:fs/promises";
 import path from "node:path";
 
-import { PretendActError } from "./errors";
-import { importOptionalPeer } from "./optional-peer";
+import git from "isomorphic-git";
 
 export const defaultWorkspaceIgnore = [
 	".git",
@@ -21,79 +21,173 @@ export type WorkspaceFilterOptions = {
 
 export type WorkspaceFilter = {
 	patterns: string[];
+	excludePatterns: string[];
 	shouldCopy(relativePath: string): boolean;
 };
 
-type IgnoreModule = {
-	default?: () => IgnoreMatcher;
-};
-
-type IgnoreMatcher = {
-	add(patterns: string[]): IgnoreMatcher;
-	ignores(path: string): boolean;
-};
+export const workspaceGlobPatterns = [
+	"**/*",
+	"**/.*",
+	"**/.*/**",
+	"**/.*/**/*",
+];
 
 export async function createWorkspaceFilter(
 	workspacePath: string,
 	options: WorkspaceFilterOptions = {},
 ): Promise<WorkspaceFilter> {
-	const patterns = [
-		...(options.includeDefaultIgnore === false ? [] : defaultWorkspaceIgnore),
-		...(await readGitIgnorePatterns(workspacePath, options.useGitIgnore)),
-		...(options.ignore ?? []),
-	];
+	const patterns = createWorkspaceIgnorePatterns(options);
+	const excludePatterns = createWorkspaceExcludePatterns(options);
+	const gitIgnoredPaths = options.useGitIgnore
+		? await listGitIgnoredPaths(workspacePath, excludePatterns)
+		: new Set<string>();
 
-	if (patterns.length === 0) {
+	if (patterns.length === 0 && gitIgnoredPaths.size === 0) {
 		return {
+			excludePatterns,
 			patterns,
 			shouldCopy: () => true,
 		};
 	}
 
-	const ignoreModule = await importOptionalPeer<IgnoreModule>(
-		"ignore",
-		"workspace filter",
-	);
-	const createIgnore = ignoreModule.default;
-	if (!createIgnore) {
-		throw new PretendActError(
-			"Optional peer 'ignore' did not expose a default export.",
-			{ code: "PRETEND_ACT_INVALID_OPTIONAL_PEER" },
-		);
-	}
-
-	const matcher = createIgnore().add(patterns);
 	return {
+		excludePatterns,
 		patterns,
 		shouldCopy(relativePath) {
 			const normalizedPath = relativePath.split(path.sep).join("/");
-			return !normalizedPath || !matcher.ignores(normalizedPath);
+			return (
+				!normalizedPath ||
+				(!isWorkspacePathExcluded(normalizedPath, excludePatterns) &&
+					!isGitIgnoredPath(gitIgnoredPaths, normalizedPath))
+			);
 		},
 	};
 }
 
-async function readGitIgnorePatterns(
-	workspacePath: string,
-	useGitIgnore: WorkspaceFilterOptions["useGitIgnore"],
-): Promise<string[]> {
-	if (!useGitIgnore) {
-		return [];
-	}
+export function createWorkspaceIgnorePatterns(
+	options: WorkspaceFilterOptions = {},
+): string[] {
+	return [
+		...(options.includeDefaultIgnore === false ? [] : defaultWorkspaceIgnore),
+		...(options.ignore ?? []),
+	];
+}
 
-	const gitIgnorePath =
-		typeof useGitIgnore === "object" && useGitIgnore.filePath
-			? useGitIgnore.filePath
-			: path.join(workspacePath, ".gitignore");
-
-	try {
-		return (await readFile(gitIgnorePath, "utf8"))
-			.split(/\r?\n/u)
-			.map((line) => line.trim())
-			.filter((line) => line && !line.startsWith("#"));
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+export function createWorkspaceExcludePatterns(
+	options: WorkspaceFilterOptions = {},
+): string[] {
+	return createWorkspaceIgnorePatterns(options).flatMap((pattern) => {
+		const normalizedPattern = normalizeWorkspacePattern(pattern);
+		if (!normalizedPattern) {
 			return [];
 		}
-		throw error;
+		const patterns = [normalizedPattern];
+		if (
+			!normalizedPattern.startsWith("**/") &&
+			!normalizedPattern.includes("/")
+		) {
+			patterns.push(`**/${normalizedPattern}`);
+		}
+		return patterns;
+	});
+}
+
+export function isWorkspacePathExcluded(
+	relativePath: string,
+	excludePatterns: readonly string[],
+): boolean {
+	let normalizedPath = relativePath.split(path.sep).join("/");
+	while (normalizedPath) {
+		if (
+			excludePatterns.some((pattern) =>
+				path.matchesGlob(normalizedPath, pattern),
+			)
+		) {
+			return true;
+		}
+		const parentPath = path.posix.dirname(normalizedPath);
+		normalizedPath = parentPath === "." ? "" : parentPath;
 	}
+	return false;
+}
+
+async function listGitIgnoredPaths(
+	workspacePath: string,
+	excludePatterns: readonly string[],
+): Promise<Set<string>> {
+	const ignoredPaths = new Set<string>();
+	await visitGitIgnoredPaths(
+		workspacePath,
+		workspacePath,
+		excludePatterns,
+		ignoredPaths,
+	);
+	return ignoredPaths;
+}
+
+async function visitGitIgnoredPaths(
+	workspacePath: string,
+	currentPath: string,
+	excludePatterns: readonly string[],
+	ignoredPaths: Set<string>,
+): Promise<void> {
+	const relativePath = path.relative(workspacePath, currentPath);
+	const normalizedPath = relativePath.split(path.sep).join("/");
+	if (normalizedPath === ".git" || normalizedPath.startsWith(".git/")) {
+		ignoredPaths.add(normalizedPath);
+		return;
+	}
+	if (
+		normalizedPath &&
+		isWorkspacePathExcluded(normalizedPath, excludePatterns)
+	) {
+		return;
+	}
+	const stat = await lstat(currentPath);
+	if (normalizedPath) {
+		const ignored = await git.isIgnored({
+			dir: workspacePath,
+			filepath: stat.isDirectory() ? `${normalizedPath}/` : normalizedPath,
+			fs: nodeFs,
+		});
+		if (ignored) {
+			ignoredPaths.add(normalizedPath);
+			return;
+		}
+	}
+
+	if (!stat.isDirectory()) {
+		return;
+	}
+	for (const entry of await readdir(currentPath)) {
+		await visitGitIgnoredPaths(
+			workspacePath,
+			path.join(currentPath, entry),
+			excludePatterns,
+			ignoredPaths,
+		);
+	}
+}
+
+function normalizeWorkspacePattern(pattern: string): string {
+	return pattern
+		.trim()
+		.replaceAll("\\", "/")
+		.replace(/^\.\//u, "")
+		.replace(/^\/+|\/+$/gu, "");
+}
+
+function isGitIgnoredPath(
+	ignoredPaths: Set<string>,
+	normalizedPath: string,
+): boolean {
+	let currentPath = normalizedPath;
+	while (currentPath) {
+		if (ignoredPaths.has(currentPath)) {
+			return true;
+		}
+		const parentPath = path.posix.dirname(currentPath);
+		currentPath = parentPath === "." ? "" : parentPath;
+	}
+	return false;
 }
