@@ -9,7 +9,7 @@
 	},
 	"include": [
 		"**/vite*.ts",
-        "**/tsdown.ts",
+		"**/tsdown.ts",
 		"**/scripts/**/*.ts",
 		"**/skills/**/*.ts"
 	]

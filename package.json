@@ -1,45 +1,124 @@
 {
 	"name": "pretend-act",
 	"version": "0.1.0",
-	"description": "A Local-Oriented, Programmatic GitHub Actions Toolkits Based on nektos/act",
+	"description": "A modern, programmatic local GitHub Actions toolkit built around nektos/act",
 	"type": "module",
+	"sideEffects": false,
+	"files": [
+		"dist",
+		"README.md",
+		"README_zh.md",
+		"docs"
+	],
 	"exports": {
 		".": {
-			"import": "./dist/index.js",
-			"types": "./dist/index.d.ts"
+			"import": "./dist/index.mjs",
+			"types": "./dist/index.d.mts"
 		},
 		"./github": {
-			"import": "./dist/github/index.js",
-			"types": "./dist/github/index.d.ts"
+			"import": "./dist/github/index.mjs",
+			"types": "./dist/github/index.d.mts"
+		},
+		"./github-core": {
+			"import": "./dist/github-core/index.mjs",
+			"types": "./dist/github-core/index.d.mts"
+		},
+		"./github-artifacts": {
+			"import": "./dist/github-artifacts/index.mjs",
+			"types": "./dist/github-artifacts/index.d.mts"
+		},
+		"./github-registry": {
+			"import": "./dist/github-registry/index.mjs",
+			"types": "./dist/github-registry/index.d.mts"
+		},
+		"./git-registry": {
+			"import": "./dist/git-registry/index.mjs",
+			"types": "./dist/git-registry/index.d.mts"
+		},
+		"./npm-registry": {
+			"import": "./dist/npm-registry/index.mjs",
+			"types": "./dist/npm-registry/index.d.mts"
+		},
+		"./crates-registry": {
+			"import": "./dist/crates-registry/index.mjs",
+			"types": "./dist/crates-registry/index.d.mts"
+		},
+		"./docker-registry": {
+			"import": "./dist/docker-registry/index.mjs",
+			"types": "./dist/docker-registry/index.d.mts"
 		},
 		"./npm": {
-			"import": "./dist/npm/index.js",
-			"types": "./dist/npm/index.d.ts"
+			"import": "./dist/npm/index.mjs",
+			"types": "./dist/npm/index.d.mts"
 		},
 		"./crates": {
-			"import": "./dist/crates/index.js",
-			"types": "./dist/crates/index.d.ts"
+			"import": "./dist/crates/index.mjs",
+			"types": "./dist/crates/index.d.mts"
 		}
+	},
+	"engines": {
+		"node": ">=22.12"
 	},
 	"scripts": {
 		"prepare": "prek install",
 		"lint": "biome check",
 		"lint-fix": "biome check --write",
 		"typecheck": "tsc -b",
-		"test": "vitest",
+		"test": "vitest run",
+		"test-watch": "vitest",
 		"build": "tsdown",
 		"dev": "tsdown --watch"
 	},
-	"keywords": [],
+	"keywords": [
+		"github-actions",
+		"act",
+		"testing",
+		"mock-github",
+		"workflow"
+	],
 	"author": "Zhou Yeheng <root@aitiotekt.com>",
 	"license": "MIT",
 	"packageManager": "pnpm@10.33.0",
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.13",
 		"@j178/prek": "^0.3.11",
+		"@octokit/core": "^7.0.6",
+		"@platformatic/vfs": "^0.4.0",
 		"@types/node": "^25.6.0",
+		"ignore": "^7.0.5",
+		"isomorphic-git": "^1.37.6",
 		"tsdown": "^0.21.10",
 		"typescript": "^6.0.3",
-		"vitest": "^4.1.5"
+		"verdaccio": "^6.2.1",
+		"vitest": "^4.1.5",
+		"yaml": "^2.8.1"
+	},
+	"peerDependencies": {
+		"@octokit/core": "^7.0.0",
+		"@platformatic/vfs": "^0.4.0",
+		"ignore": "^7.0.0",
+		"isomorphic-git": "^1.0.0",
+		"verdaccio": "^6.0.0",
+		"yaml": "^2.0.0"
+	},
+	"peerDependenciesMeta": {
+		"@octokit/core": {
+			"optional": true
+		},
+		"@platformatic/vfs": {
+			"optional": true
+		},
+		"ignore": {
+			"optional": true
+		},
+		"isomorphic-git": {
+			"optional": true
+		},
+		"verdaccio": {
+			"optional": true
+		},
+		"yaml": {
+			"optional": true
+		}
 	}
 }

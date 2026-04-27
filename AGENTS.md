@@ -26,7 +26,7 @@ _Single source of truth for Agent identity, code standards, and project rules. S
 ### File Organization
 
 - **Docs**: [`README.md`](README.md) -> [`docs/`](docs/)
-- **Docs Site**: [`docsite/`](docsite/) is the VitePress source root. Keep source content in [`docs/en`](docs/en), [`docs/zh`](docs/zh), and root docs; maintain Git-compatible relative symlinks into `docsite/` via `docsite/scripts/sync-docsite-symlink.ts`. Do not copy source docs or restore a `docsite/.staged/` pipeline. The custom domain is `securitydept.ethaxon.com` with VitePress `base: "/"`. Docs site build/verification is independent from the main app build and should use `just build-docs`.
+- **Docs Site**: [`docsite/`](docsite/) is the VitePress source root. Keep source content in [`docs/en`](docs/en), [`docs/zh`](docs/zh), and root docs; maintain Git-compatible relative symlinks into `docsite/` via `docsite/scripts/sync-docsite-symlink.ts`. Do not copy source docs or restore a `docsite/.staged/` pipeline. The custom domain is `pretend-act.ethaxon.com` with VitePress `base: "/"`. Docs site build/verification is independent from the main app build and should use `just build-docs`.
 - **Data**: [`data/`](data/)
 - **Temp**: [`temp/`](temp/) if agents need to create temp files, please use temp folder
 
@@ -42,7 +42,6 @@ _Single source of truth for Agent identity, code standards, and project rules. S
   - For enum-like string domains, prefer `export const Foo = { ... } as const` + `export type Foo = (typeof Foo)[keyof typeof Foo]`.
   - For public contracts and repeated telemetry vocabulary, extract named constants instead of scattering raw strings.
   - **TS SDK API shape — options object first**: public functions use an `options` object for optional params; positional second args only when self-evident and uniquely ergonomic. Widening an API converts the whole second arg to options even if it's a breaking change.
-- **Web UI Stack**: TS + Vite + React + `@tanstack/react-*` + TailwindCSS + shadcn/ui.
 
 ### Multi-language Docs
 
