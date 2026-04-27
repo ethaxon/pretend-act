@@ -1,0 +1,45 @@
+{
+	"name": "pretend-act",
+	"version": "0.1.0",
+	"description": "A Local-Oriented, Programmatic GitHub Actions Toolkits Based on nektos/act",
+	"type": "module",
+	"exports": {
+		".": {
+			"import": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		},
+		"./github": {
+			"import": "./dist/github/index.js",
+			"types": "./dist/github/index.d.ts"
+		},
+		"./npm": {
+			"import": "./dist/npm/index.js",
+			"types": "./dist/npm/index.d.ts"
+		},
+		"./crates": {
+			"import": "./dist/crates/index.js",
+			"types": "./dist/crates/index.d.ts"
+		}
+	},
+	"scripts": {
+		"prepare": "prek install",
+		"lint": "biome check",
+		"lint-fix": "biome check --write",
+		"typecheck": "tsc -b",
+		"test": "vitest",
+		"build": "tsdown",
+		"dev": "tsdown --watch"
+	},
+	"keywords": [],
+	"author": "Zhou Yeheng <root@aitiotekt.com>",
+	"license": "MIT",
+	"packageManager": "pnpm@10.33.0",
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.13",
+		"@j178/prek": "^0.3.11",
+		"@types/node": "^25.6.0",
+		"tsdown": "^0.21.10",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.5"
+	}
+}

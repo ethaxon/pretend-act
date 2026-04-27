@@ -1,0 +1,25 @@
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+!**/.env.j2
+!**/.env.*.j2
+data/*
+!data/.gitkeep
+temp/*
+!temp/.gitkeep
+
+# AI
+.factory
+.claude/*local*
+
+# Web Dev
+**/dist
+**/.vite
+**/.vitest
+**/node_modules
+**/tsconfig*.tsbuildinfo
+**/*.local.*
+**/.DS_Store
+**/dist-tsc
+**/test-results

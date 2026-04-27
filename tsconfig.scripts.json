@@ -1,0 +1,16 @@
+{
+	"extends": "./tsconfig.base.json",
+	"compilerOptions": {
+		"outDir": "./dist-tsc/scripts",
+		"types": ["node"],
+		"module": "NodeNext",
+		"moduleResolution": "nodenext",
+		"allowImportingTsExtensions": true
+	},
+	"include": [
+		"**/vite*.ts",
+        "**/tsdown.ts",
+		"**/scripts/**/*.ts",
+		"**/skills/**/*.ts"
+	]
+}
