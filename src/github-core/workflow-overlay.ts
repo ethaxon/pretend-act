@@ -1,86 +1,141 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import type { Injector } from "injection-js";
+import { parse, stringify } from "yaml";
 
-import { importOptionalPeer, PretendActError } from "../core/index";
-import type {
-	GithubWorkflow,
-	MockStep,
-	MockSteps,
-	WorkflowStep,
-} from "./types";
-
-type YamlModule = {
-	parse(source: string): unknown;
-	stringify(value: unknown): string;
-};
+import { compileActionPretendersToWorkflowOverlay } from "../actions/compile";
+import type { ActionPretenderRegistry } from "../actions/types";
+import { createDisposableTempDirectory } from "../core/index";
+import type { EngineCapabilities, PretendEngineType } from "../engine/types";
+import {
+	applyWorkflowOverlayToModel,
+	type GithubWorkflow,
+	type WorkflowOverlay,
+} from "../workflows/index";
 
 export type ApplyWorkflowOverlayOptions = {
 	cwd: string;
 	workflowFile: string;
-	mockSteps: MockSteps;
+	workflowOverlay?: WorkflowOverlay;
+	actions?: ActionPretenderRegistry;
+	actionConfig?: unknown;
+	engine?: PretendEngineType;
+	capabilities?: EngineCapabilities;
+	injector?: Injector;
+};
+
+export type PreparedWorkflowOverlay = AsyncDisposable & {
+	cwd: string;
+	workflowFile: string;
+	sourceWorkflowFile: string;
+	stagedWorkflowFile?: string;
+	staged: boolean;
 };
 
 export async function applyWorkflowOverlay(
 	options: ApplyWorkflowOverlayOptions,
 ): Promise<void> {
-	const yaml = await importOptionalPeer<YamlModule>("yaml", "workflow overlay");
 	const workflowPath = resolveWorkflowPath(options.cwd, options.workflowFile);
-	const workflow = yaml.parse(
-		await readFile(workflowPath, "utf8"),
-	) as GithubWorkflow;
+	const workflow = await readWorkflow(workflowPath);
+	const overlay = await buildWorkflowOverlay(options, workflow);
 
-	for (const [jobId, steps] of Object.entries(options.mockSteps)) {
-		applyJobOverlay(workflow, jobId, steps);
+	if (overlay.length > 0) {
+		applyWorkflowOverlayToModel(workflow, overlay);
 	}
 
-	await writeFile(workflowPath, yaml.stringify(workflow), "utf8");
+	await writeFile(workflowPath, stringify(workflow), "utf8");
 }
 
-export function applyJobOverlay(
+export async function prepareWorkflowOverlay(
+	options: ApplyWorkflowOverlayOptions,
+): Promise<PreparedWorkflowOverlay> {
+	const sourceWorkflowFile = resolveWorkflowPath(
+		options.cwd,
+		options.workflowFile,
+	);
+	if (!hasWorkflowTransforms(options)) {
+		return createOriginalPreparedWorkflow(options.cwd, options.workflowFile);
+	}
+
+	const workflow = await readWorkflow(sourceWorkflowFile);
+	const overlay = await buildWorkflowOverlay(options, workflow);
+	if (overlay.length === 0) {
+		return createOriginalPreparedWorkflow(options.cwd, options.workflowFile);
+	}
+
+	applyWorkflowOverlayToModel(workflow, overlay);
+	const tempDirectory = await createDisposableTempDirectory(
+		".pretend-act-workflow-",
+		options.cwd,
+	);
+	const stagedRelativeWorkflowFile = stagedWorkflowRelativePath(
+		options.workflowFile,
+	);
+	const stagedWorkflowFile = path.join(
+		tempDirectory.path,
+		stagedRelativeWorkflowFile,
+	);
+	await mkdir(path.dirname(stagedWorkflowFile), { recursive: true });
+	await writeFile(stagedWorkflowFile, stringify(workflow), "utf8");
+
+	return {
+		cwd: options.cwd,
+		workflowFile: path.relative(options.cwd, stagedWorkflowFile),
+		sourceWorkflowFile,
+		stagedWorkflowFile,
+		staged: true,
+		async [Symbol.asyncDispose]() {
+			await tempDirectory[Symbol.asyncDispose]();
+		},
+	};
+}
+
+async function readWorkflow(workflowPath: string): Promise<GithubWorkflow> {
+	return parse(await readFile(workflowPath, "utf8")) as GithubWorkflow;
+}
+
+async function buildWorkflowOverlay(
+	options: ApplyWorkflowOverlayOptions,
 	workflow: GithubWorkflow,
-	jobId: string,
-	mockSteps: MockStep[],
-): void {
-	const job = workflow.jobs?.[jobId];
-	if (!job?.steps) {
-		throw new PretendActError(`Could not find job '${jobId}' in workflow.`, {
-			code: "PRETEND_ACT_WORKFLOW_JOB_NOT_FOUND",
-		});
-	}
+): Promise<WorkflowOverlay> {
+	return [
+		...(options.workflowOverlay ?? []),
+		...(await compileActionPretendersToWorkflowOverlay({
+			workflow,
+			actions: options.actions,
+			config: options.actionConfig,
+			engine: options.engine,
+			capabilities: options.capabilities,
+			injector: options.injector,
+		})),
+	];
+}
 
-	const pendingInserts: {
-		index: number;
-		after: boolean;
-		step: WorkflowStep;
-	}[] = [];
-	for (const mockStep of mockSteps) {
-		const stepIndex = locateStep(job.steps, mockStep);
-		if (stepIndex < 0) {
-			throw new PretendActError(`Could not find step in job '${jobId}'.`, {
-				code: "PRETEND_ACT_WORKFLOW_STEP_NOT_FOUND",
-			});
-		}
+function hasWorkflowTransforms(options: ApplyWorkflowOverlayOptions): boolean {
+	return (
+		(options.workflowOverlay?.length ?? 0) > 0 ||
+		Object.keys(options.actions ?? {}).length > 0
+	);
+}
 
-		if ("before" in mockStep || "after" in mockStep) {
-			pendingInserts.push({
-				index: stepIndex,
-				after: "after" in mockStep,
-				step: normalizeMockStep(mockStep, job.steps[stepIndex]),
-			});
-		} else {
-			job.steps[stepIndex] = normalizeMockStep(mockStep, job.steps[stepIndex]);
-		}
-	}
+function createOriginalPreparedWorkflow(
+	cwd: string,
+	workflowFile: string,
+): PreparedWorkflowOverlay {
+	return {
+		cwd,
+		workflowFile,
+		sourceWorkflowFile: resolveWorkflowPath(cwd, workflowFile),
+		staged: false,
+		async [Symbol.asyncDispose]() {},
+	};
+}
 
-	for (const insert of pendingInserts.sort(
-		(left, right) => right.index - left.index,
-	)) {
-		job.steps.splice(
-			insert.after ? insert.index + 1 : insert.index,
-			0,
-			insert.step,
-		);
+function stagedWorkflowRelativePath(workflowFile: string): string {
+	if (path.isAbsolute(workflowFile)) {
+		return path.join(".github", "workflows", path.basename(workflowFile));
 	}
+	return workflowFile;
 }
 
 function resolveWorkflowPath(cwd: string, workflowFile: string): string {
@@ -88,69 +143,4 @@ function resolveWorkflowPath(cwd: string, workflowFile: string): string {
 		return workflowFile;
 	}
 	return path.resolve(cwd, workflowFile);
-}
-
-function normalizeMockStep(
-	mockStep: MockStep,
-	oldStep: WorkflowStep,
-): WorkflowStep {
-	if (typeof mockStep.mockWith === "string") {
-		const { uses: _uses, ...rest } = oldStep;
-		return { ...rest, run: mockStep.mockWith };
-	}
-
-	return {
-		...oldStep,
-		...mockStep.mockWith,
-		env: mergeObject(oldStep.env, mockStep.mockWith.env),
-		with: mergeObject(oldStep.with, mockStep.mockWith.with),
-	};
-}
-
-function mergeObject(
-	left: Record<string, unknown> | undefined,
-	right: Record<string, unknown> | undefined,
-): Record<string, unknown> | undefined {
-	if (!left && !right) {
-		return undefined;
-	}
-	return { ...(left ?? {}), ...(right ?? {}) };
-}
-
-function locateStep(steps: WorkflowStep[], mockStep: MockStep): number {
-	return steps.findIndex((step, index) => {
-		if ("id" in mockStep) {
-			return step.id === mockStep.id;
-		}
-		if ("name" in mockStep) {
-			return step.name === mockStep.name;
-		}
-		if ("uses" in mockStep) {
-			return step.uses === mockStep.uses;
-		}
-		if ("run" in mockStep) {
-			return step.run === mockStep.run;
-		}
-		if ("index" in mockStep) {
-			return index === mockStep.index;
-		}
-		if ("before" in mockStep) {
-			return matchesBeforeAfter(step, index, mockStep.before);
-		}
-		if ("after" in mockStep) {
-			return matchesBeforeAfter(step, index, mockStep.after);
-		}
-		return false;
-	});
-}
-
-function matchesBeforeAfter(
-	step: WorkflowStep,
-	index: number,
-	selector: string | number,
-): boolean {
-	if (typeof selector === "number") {
-		return index === selector;
-	}
-	return [step.id, step.name, step.uses, step.run].includes(selector);
 }

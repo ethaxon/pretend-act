@@ -53,12 +53,13 @@ type CargoPublishMetadata = {
 	rust_version?: string | null;
 };
 
-export type CratesRegistryService = CargoRegistryConfig & {
-	rootPath: string;
-	registryUrl: string;
-	indexUrl: string;
-	stop(): Promise<void>;
-};
+export type CratesRegistryService = AsyncDisposable &
+	CargoRegistryConfig & {
+		rootPath: string;
+		registryUrl: string;
+		indexUrl: string;
+		stop(): Promise<void>;
+	};
 
 export type StartCratesRegistryOptions = {
 	name?: string;
@@ -88,6 +89,15 @@ export async function startCratesRegistry(
 	});
 	await listen(server, port);
 
+	async function stop() {
+		await new Promise<void>((resolve, reject) =>
+			server.close((error) => (error ? reject(error) : resolve())),
+		);
+		if (!options.keepOnStop) {
+			await removePath(rootPath);
+		}
+	}
+
 	return {
 		...createCargoRegistryConfig({
 			name: options.name ?? "pretend-act",
@@ -97,13 +107,9 @@ export async function startCratesRegistry(
 		rootPath,
 		registryUrl,
 		indexUrl,
-		async stop() {
-			await new Promise<void>((resolve, reject) =>
-				server.close((error) => (error ? reject(error) : resolve())),
-			);
-			if (!options.keepOnStop) {
-				await removePath(rootPath);
-			}
+		stop,
+		async [Symbol.asyncDispose]() {
+			await stop();
 		},
 	};
 }

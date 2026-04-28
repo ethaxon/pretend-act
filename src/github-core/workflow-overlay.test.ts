@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { WorkflowOverlayOperationType } from "../workflows/index";
 import { applyWorkflowOverlay } from "./workflow-overlay";
 
 describe("workflow overlay", () => {
@@ -35,14 +36,14 @@ jobs:
 		await applyWorkflowOverlay({
 			cwd: sandboxDir,
 			workflowFile: workflowPath,
-			mockSteps: {
-				"release-plan": [
-					{
-						uses: "actions/checkout@v6",
-						mockWith: { if: neverCondition },
-					},
-				],
-			},
+			workflowOverlay: [
+				{
+					type: WorkflowOverlayOperationType.SkipStep,
+					jobId: "release-plan",
+					selector: { uses: "actions/checkout@v6" },
+					condition: neverCondition,
+				},
+			],
 		});
 
 		expect(await readFile(path.join(sourceDir, "release.yml"), "utf8")).toBe(

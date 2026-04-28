@@ -1,6 +1,13 @@
 export type Dict<T = string> = Record<string, T>;
 
-export type RunStatus = "success" | "failure" | "cancelled" | "unknown";
+export const RunStatus = {
+	Success: "success",
+	Failure: "failure",
+	Cancelled: "cancelled",
+	Unknown: "unknown",
+} as const;
+
+export type RunStatus = (typeof RunStatus)[keyof typeof RunStatus];
 
 export type CommandSpec = {
 	command: string;
@@ -38,9 +45,7 @@ export type RunResult = {
 	jobs: JobResult[];
 };
 
-export type DisposableResource = {
-	dispose(): Promise<void> | void;
-};
+export type DisposableResource = Disposable | AsyncDisposable;
 
 export type WorkspaceSandbox = DisposableResource & {
 	rootPath: string;

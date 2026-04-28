@@ -10,21 +10,28 @@ import {
 } from "./fs";
 import { importOptionalPeer } from "./optional-peer";
 
-export type FileSystemBackendKind = "real" | "memory" | "overlay";
+export const FileSystemBackendKind = {
+	Real: "real",
+	Memory: "memory",
+	Overlay: "overlay",
+} as const;
+
+export type FileSystemBackendKind =
+	(typeof FileSystemBackendKind)[keyof typeof FileSystemBackendKind];
 
 export type MaterializedPath = DisposableTempDirectory;
 
-export type FileSystemBackend = {
-	kind: FileSystemBackendKind;
-	rootPath?: string;
-	requiresMaterialization: boolean;
-	readFile(filePath: string): Promise<Buffer>;
-	writeFile(filePath: string, content: string | Buffer): Promise<void>;
-	mkdir(directoryPath: string): Promise<void>;
-	resolvePath(rootPath: string, ...parts: string[]): Promise<string>;
-	materialize?(options?: { prefix?: string }): Promise<MaterializedPath>;
-	dispose?(): Promise<void> | void;
-};
+export type FileSystemBackend = Partial<Disposable> &
+	Partial<AsyncDisposable> & {
+		kind: FileSystemBackendKind;
+		rootPath?: string;
+		requiresMaterialization: boolean;
+		readFile(filePath: string): Promise<Buffer>;
+		writeFile(filePath: string, content: string | Buffer): Promise<void>;
+		mkdir(directoryPath: string): Promise<void>;
+		resolvePath(rootPath: string, ...parts: string[]): Promise<string>;
+		materialize?(options?: { prefix?: string }): Promise<MaterializedPath>;
+	};
 
 type PlatformaticVfsModule = {
 	create(options?: unknown, maybeOptions?: unknown): PlatformaticVfs;
@@ -43,7 +50,7 @@ export function createRealFileSystemBackend(
 	rootPath?: string,
 ): FileSystemBackend {
 	return {
-		kind: "real",
+		kind: FileSystemBackendKind.Real,
 		rootPath,
 		requiresMaterialization: false,
 		readFile,
@@ -69,7 +76,7 @@ export async function createMemoryFileSystemBackend(): Promise<FileSystemBackend
 	});
 
 	return {
-		kind: "memory",
+		kind: FileSystemBackendKind.Memory,
 		requiresMaterialization: true,
 		readFile: vfs.promises.readFile,
 		async writeFile(filePath, content) {
@@ -88,7 +95,7 @@ export async function createMemoryFileSystemBackend(): Promise<FileSystemBackend
 				os.tmpdir(),
 			);
 		},
-		dispose() {
+		[Symbol.dispose]() {
 			vfs.unmount?.();
 		},
 	};

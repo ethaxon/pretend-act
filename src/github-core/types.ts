@@ -1,103 +1,89 @@
+import type { InjectionToken, Injector, Provider, Type } from "injection-js";
+
+import type { FileSystemBackend, WorkspaceFilterOptions } from "../core/index";
 import type {
-	Dict,
-	FileSystemBackend,
-	RunLogEvent,
-	WorkspaceFilterOptions,
-} from "../core/index";
+	GitHttpTransportCreateOptions,
+	GitRegistry,
+	GitRegistryTransport,
+} from "../git-registry/index";
+import type {
+	GithubWorkflow,
+	WorkflowJob,
+	WorkflowOverlay,
+	WorkflowStep,
+	WorkflowStepSelector,
+} from "../workflows/index";
 
-export type ActRunnerOptions = {
-	cwd?: string;
-	workflowFile?: string;
-	actBinary?: string;
-	defaultImage?: string;
+export type {
+	GithubWorkflow,
+	WorkflowJob,
+	WorkflowOverlay,
+	WorkflowStep,
+	WorkflowStepSelector,
 };
 
-export type ActRunOptions = {
-	cwd?: string;
-	workflowFile?: string;
-	bind?: boolean;
-	dryRun?: boolean;
-	verbose?: boolean;
-	job?: string;
-	logFile?: string;
-	eventPath?: string;
-	eventPayload?: unknown;
-	inputs?: Dict<string>;
-	env?: Dict<string>;
-	secrets?: Dict<string>;
-	vars?: Dict<string>;
-	platforms?: Dict<string>;
-	matrix?: Dict<string[]>;
-	containerOptions?: string;
-	containerArchitecture?: string;
-	containerDaemonSocket?: string;
-	artifactServer?: {
-		path: string;
-		port?: string | number;
-	};
-	mockSteps?: MockSteps;
-	passthroughArgs?: string[];
-	onLog?: (event: RunLogEvent) => void;
+export const GithubRepositorySourceType = {
+	Local: "local",
+} as const;
+
+export type GithubRepositorySourceType =
+	(typeof GithubRepositorySourceType)[keyof typeof GithubRepositorySourceType];
+
+export type StepSelector = WorkflowStepSelector;
+
+export type PretendInjectionToken<T> = InjectionToken<T> | Type<T>;
+
+export type GithubActionsContainerOptions = {
+	repository: GithubRepositoryOptions;
+	providers?: Provider[];
+	parentInjector?: Injector;
 };
 
-export type MockSteps = Record<string, MockStep[]>;
-
-export type MockStep = StepSelector & {
-	mockWith: WorkflowStep | string;
-};
-
-export type StepSelector =
-	| { id: string }
-	| { name: string }
-	| { uses: string }
-	| { run: string }
-	| { index: number }
-	| { before: string | number }
-	| { after: string | number };
-
-export type WorkflowStep = {
-	id?: string;
-	name?: string;
-	uses?: string;
-	run?: string;
-	if?: string;
-	with?: Dict<unknown>;
-	env?: Dict<unknown>;
-	[key: string]: unknown;
-};
-
-export type WorkflowJob = {
-	name?: string;
-	steps?: WorkflowStep[];
-	[key: string]: unknown;
-};
-
-export type GithubWorkflow = {
-	name?: string;
-	on?: unknown;
-	jobs?: Record<string, WorkflowJob>;
-	[key: string]: unknown;
-};
-
-export type GithubSandboxOptions = {
-	workspacePath: string;
-	setupPath?: string;
-	tempRootPath?: string;
-	repoName?: string;
+export type GithubRepositoryOptions = {
 	owner?: string;
+	name: string;
 	defaultBranch?: string;
 	ref?: string;
 	sha?: string;
+	source: GithubRepositorySource;
+	checkout?: false | GithubCheckoutOptions;
+	sandbox?: GithubRepositorySandboxOptions;
+};
+
+export type GithubRepositorySource = GithubLocalRepositorySource;
+
+export type GithubLocalRepositorySource = {
+	type?: typeof GithubRepositorySourceType.Local;
+	path: string;
 	ignore?: string[];
 	workspaceFilter?: WorkspaceFilterOptions;
+	files?: { src: string; dest?: string }[];
+};
+
+export type GithubRepositorySandboxOptions = {
+	setupPath?: string;
+	tempRootPath?: string;
 	fsBackend?: "real" | "memory" | "overlay" | FileSystemBackend;
 	materialize?: "always" | "before-child-process" | "never";
 	keepOnFailure?: boolean;
 	initializeGit?: boolean;
-	files?: { src: string; dest?: string }[];
 };
 
-export type GithubSandbox = {
+export type GithubCheckoutOptions = {
+	transport?: GitRegistryTransport;
+	http?: GitHttpTransportCreateOptions;
+	remoteUrl?: string;
+	sourceRef?: string;
+	sourceSha?: string;
+	snapshotBranch?: string;
+	snapshotMessage?: string;
+	workspaceFilter?: WorkspaceFilterOptions;
+	forceSnapshot?: boolean;
+};
+
+export type GithubCheckoutBackend = GitRegistry;
+
+export type GithubActionsWorkspace = {
 	rootPath: string;
 	repoPath: string;
 	repoName: string;
@@ -107,6 +93,13 @@ export type GithubSandbox = {
 	backend?: FileSystemBackend;
 	getPath(repositoryName?: string): string | undefined;
 	materialize(): Promise<string>;
+};
+
+export type GithubActionsContainer = AsyncDisposable & {
+	workspace: GithubActionsWorkspace;
+	checkout?: GithubCheckoutBackend;
+	injector: Injector;
+	get<T>(token: PretendInjectionToken<T>): T | undefined;
+	require<T>(token: PretendInjectionToken<T>): T;
 	cleanup(options?: { failed?: boolean }): Promise<void>;
-	dispose(): Promise<void>;
 };

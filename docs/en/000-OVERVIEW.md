@@ -1,8 +1,8 @@
 # Overview
 
-Pretend Act is a local workflow simulation toolkit for projects that need more than a shell command around `act`. It provides a programmatic runner, a disposable mock repository, workflow overlays, artifact helpers, and registry configuration helpers that can be reused across release automation projects.
+Pretend Act is a local workflow simulation toolkit for projects that need more than a shell command around `act`. It provides a programmatic runner, a disposable GitHub Actions dependency container, workflow overlays, artifact helpers, and registry configuration helpers that can be reused across release automation projects.
 
-The first implementation is intentionally practical. It aims to replace the common `@kie/act-js` plus `@kie/mock-github` stack used to test release workflows locally, including the SecurityDept release workflow simulation pattern.
+The first implementation is intentionally practical. It focuses on real release workflow simulation needs, including the SecurityDept release workflow simulation pattern, while keeping the public model independent from any single runner engine.
 
 ## Goals
 
@@ -28,13 +28,13 @@ The first implementation is intentionally practical. It aims to replace the comm
 | custom container options | Yes | Includes SecurityDept host UID/GID use case. |
 | workflow overlay | Yes | Skip, replace, insert step in sandbox only. |
 | git registry checkout | Yes | Dirty workspaces use filtered snapshot commits; explicit commit/tag/clean branch refs publish directly; local file and optional HTTP transports are supported. |
-| MockGithub-like repository | Yes | Temporary staged repo plus cleanup. |
+| GitHub Actions container | Yes | Temporary repository source projection, `injection-js` providers, and dependency cleanup. |
 | raw log capture | Yes | stdout/stderr and optional log file. |
 | step-level parser | Partial | Unknown when not reliable. Raw log and exit code remain authoritative. |
 | artifact service protocol parity | Partial | Local store first; protocol parity is roadmap. |
 | npm/crates registry server | Yes | Verdaccio lifecycle plus Cargo sparse registry core Web API mock. |
 | Docker registry | Partial | Local OCI Distribution lifecycle helper first. |
-| remote-mock publish mode | Partial | Service orchestration exists; full SecurityDept migration is next. |
+| remote-mock publish mode | Partial | npm/Cargo publish pretenders exist for simple run steps; Docker publish rewrite is explicit opt-in. |
 
 ## Non-Goals
 

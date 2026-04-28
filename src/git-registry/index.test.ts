@@ -1,5 +1,5 @@
 import nodeFs from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import git from "isomorphic-git";
@@ -9,7 +9,7 @@ import {
 	createDisposableTempDirectory,
 	type DisposableTempDirectory,
 } from "../core/index";
-import { createCheckoutMockStep, createGitRegistry } from "./index";
+import { createCheckoutReplacementStep, createGitRegistry } from "./index";
 
 describe("git registry", () => {
 	it("creates a snapshot remote with dirty, untracked, and deleted files", async () => {
@@ -130,7 +130,7 @@ describe("git registry", () => {
 
 	it("builds a checkout replacement step for workflow overlays", () => {
 		expect(
-			createCheckoutMockStep({
+			createCheckoutReplacementStep({
 				checkoutSha: "abc123",
 				fetchRef: "refs/heads/tmp/snapshot",
 				remoteUrl: "http://127.0.0.1:8174/repo.git",
@@ -138,6 +138,20 @@ describe("git registry", () => {
 		).toMatchObject({
 			run: expect.stringContaining("git fetch --no-tags --prune origin"),
 		});
+	});
+
+	it("cleans up through the async disposable protocol", async () => {
+		const workspace = await createFixtureRepository();
+		try {
+			const registry = await createGitRegistry({
+				workspacePath: workspace.path,
+			});
+			const rootPath = registry.rootPath;
+			await registry[Symbol.asyncDispose]();
+			await expect(lstat(rootPath)).rejects.toMatchObject({ code: "ENOENT" });
+		} finally {
+			await workspace.remove();
+		}
 	});
 });
 

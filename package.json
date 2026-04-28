@@ -1,6 +1,6 @@
 {
 	"name": "pretend-act",
-	"version": "0.1.0",
+	"version": "0.1.0-alpha.1",
 	"description": "A modern, programmatic local GitHub Actions toolkit built around nektos/act",
 	"type": "module",
 	"sideEffects": false,
@@ -32,6 +32,31 @@
 			"dev": "./src/github-artifacts/index.ts",
 			"import": "./dist/github-artifacts/index.mjs",
 			"types": "./dist/github-artifacts/index.d.mts"
+		},
+		"./config": {
+			"dev": "./src/config/index.ts",
+			"import": "./dist/config/index.mjs",
+			"types": "./dist/config/index.d.mts"
+		},
+		"./workflows": {
+			"dev": "./src/workflows/index.ts",
+			"import": "./dist/workflows/index.mjs",
+			"types": "./dist/workflows/index.d.mts"
+		},
+		"./actions": {
+			"dev": "./src/actions/index.ts",
+			"import": "./dist/actions/index.mjs",
+			"types": "./dist/actions/index.d.mts"
+		},
+		"./engine": {
+			"dev": "./src/engine/index.ts",
+			"import": "./dist/engine/index.mjs",
+			"types": "./dist/engine/index.d.mts"
+		},
+		"./runner": {
+			"dev": "./src/runner/index.ts",
+			"import": "./dist/runner/index.mjs",
+			"types": "./dist/runner/index.d.mts"
 		},
 		"./github-registry": {
 			"dev": "./src/github-registry/index.ts",
@@ -102,21 +127,21 @@
 		"@j178/prek": "^0.3.11",
 		"@octokit/core": "^7.0.6",
 		"@platformatic/vfs": "^0.4.0",
+		"@redwoodjs/agent-ci": "^0.14.0",
+		"dockerode": "^5.0.0",
+		"@types/dockerode": "^4.0.1",
 		"@types/node": "^25.6.0",
-		"isomorphic-git": "^1.37.6",
 		"tsdown": "^0.21.10",
 		"typescript": "^5.9.3",
 		"verdaccio": "^6.2.1",
-		"vite-tsconfig-paths": "^6.1.1",
-		"vitest": "^4.1.5",
-		"yaml": "^2.8.1"
+		"vitest": "^4.1.5"
 	},
 	"peerDependencies": {
 		"@octokit/core": "^7.0.0",
 		"@platformatic/vfs": "^0.4.0",
-		"isomorphic-git": "^1.0.0",
-		"verdaccio": "^6.0.0",
-		"yaml": "^2.0.0"
+		"@redwoodjs/agent-ci": "^0.14.0",
+		"dockerode": "^5.0.0",
+		"verdaccio": "^6.0.0"
 	},
 	"peerDependenciesMeta": {
 		"@octokit/core": {
@@ -125,20 +150,22 @@
 		"@platformatic/vfs": {
 			"optional": true
 		},
-		"ignore": {
+		"@redwoodjs/agent-ci": {
 			"optional": true
 		},
-		"isomorphic-git": {
+		"dockerode": {
 			"optional": true
 		},
 		"verdaccio": {
-			"optional": true
-		},
-		"yaml": {
 			"optional": true
 		}
 	},
 	"overrides": {
 		"typescript": "6.0.3"
+	},
+	"dependencies": {
+		"injection-js": "^2.6.1",
+		"isomorphic-git": "^1.37.6",
+		"yaml": "^2.8.1"
 	}
 }

@@ -6,12 +6,13 @@ import path from "node:path";
 import { createTempDirectory, removePath } from "../core/index";
 import { createNpmRegistryConfig, type NpmRegistryConfig } from "./index";
 
-export type NpmRegistryService = NpmRegistryConfig & {
-	rootPath: string;
-	storagePath: string;
-	process: ChildProcess;
-	stop(): Promise<void>;
-};
+export type NpmRegistryService = AsyncDisposable &
+	NpmRegistryConfig & {
+		rootPath: string;
+		storagePath: string;
+		process: ChildProcess;
+		stop(): Promise<void>;
+	};
 
 export type StartNpmRegistryOptions = {
 	rootPath?: string;
@@ -43,6 +44,13 @@ export async function startNpmRegistry(
 	);
 	await waitForHttp(`${registryUrl}-/ping`);
 
+	async function stop() {
+		child.kill("SIGTERM");
+		if (!options.keepOnStop) {
+			await removePath(rootPath);
+		}
+	}
+
 	return {
 		...createNpmRegistryConfig({
 			registryUrl,
@@ -52,11 +60,9 @@ export async function startNpmRegistry(
 		rootPath,
 		storagePath,
 		process: child,
-		async stop() {
-			child.kill("SIGTERM");
-			if (!options.keepOnStop) {
-				await removePath(rootPath);
-			}
+		stop,
+		async [Symbol.asyncDispose]() {
+			await stop();
 		},
 	};
 }

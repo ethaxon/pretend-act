@@ -1,43 +1,82 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
+import { ReflectiveInjector } from "injection-js";
+
 import {
 	copyWorkspace,
 	createTempDirectory,
+	type FileSystemBackend,
+	PretendActError,
 	removePath,
 	spawnCommand,
+	type WorkspaceFilterOptions,
 } from "../core/index";
-import type { GithubSandbox, GithubSandboxOptions } from "./types";
+import {
+	GithubActionsWorkspaceToken,
+	GithubCheckoutBackendToken,
+} from "./tokens";
+import type {
+	GithubActionsContainer,
+	GithubActionsContainerOptions,
+	GithubActionsWorkspace,
+	GithubCheckoutBackend,
+	GithubRepositoryOptions,
+	GithubRepositorySandboxOptions,
+	GithubRepositorySource,
+	PretendInjectionToken,
+} from "./types";
 
-export async function createGithubSandbox(
-	options: GithubSandboxOptions,
-): Promise<GithubSandbox> {
-	const repoName = options.repoName ?? "repo";
-	const owner = options.owner ?? process.env.LOGNAME ?? "pretend-act";
+const missingProvider = Symbol("pretend-act missing provider");
+
+export async function createGithubActionsContainer(
+	options: GithubActionsContainerOptions,
+): Promise<GithubActionsContainer> {
+	const { repository } = options;
+	const { sandbox, source } = repository;
+	const repoName = repository.name;
+	const owner = repository.owner ?? process.env.LOGNAME ?? "pretend-act";
 	const rootPath =
-		options.setupPath ??
-		(await createTempDirectory("pretend-act-github-", options.tempRootPath));
+		sandbox?.setupPath ??
+		(await createTempDirectory("pretend-act-github-", sandbox?.tempRootPath));
 	const repoPath = path.join(rootPath, repoName);
 	await mkdir(rootPath, { recursive: true });
+	const workspaceFilter = mergeWorkspaceFilter(source.workspaceFilter, {
+		ignore: source.ignore,
+	});
+	let checkout: GithubCheckoutBackend | undefined;
 
-	const files = options.files ?? [{ src: options.workspacePath, dest: "." }];
-	for (const file of files) {
-		await copyWorkspace({
-			sourcePath: path.resolve(options.workspacePath, file.src),
-			destinationPath: path.resolve(repoPath, file.dest ?? "."),
-			workspacePath: path.resolve(options.workspacePath),
-			filter: {
-				...options.workspaceFilter,
-				ignore: [
-					...(options.workspaceFilter?.ignore ?? []),
-					...(options.ignore ?? []),
-				],
-			},
-		});
-	}
+	try {
+		const files = source.files ?? [{ src: source.path, dest: "." }];
+		for (const file of files) {
+			await copyWorkspace({
+				sourcePath: path.resolve(source.path, file.src),
+				destinationPath: path.resolve(repoPath, file.dest ?? "."),
+				workspacePath: path.resolve(source.path),
+				filter: workspaceFilter,
+			});
+		}
+		checkout =
+			repository.checkout === false
+				? undefined
+				: await createGithubCheckoutBackend({
+						checkout: repository.checkout ?? {},
+						checkoutRootPath: path.join(rootPath, "checkout"),
+						repository,
+						repoName,
+						source,
+						workspaceFilter,
+					});
 
-	if (options.initializeGit ?? true) {
-		await initializeGitRepo(repoPath, options.defaultBranch ?? "main");
+		if (sandbox?.initializeGit ?? true) {
+			await initializeGitRepo(repoPath, repository.defaultBranch ?? "main");
+		}
+	} catch (error) {
+		await checkout?.stop();
+		if (!sandbox?.keepOnFailure) {
+			await removePath(rootPath);
+		}
+		throw error;
 	}
 
 	let cleaned = false;
@@ -46,50 +85,120 @@ export async function createGithubSandbox(
 			return;
 		}
 		cleaned = true;
-		if (cleanupOptions.failed && options.keepOnFailure) {
+		await checkout?.stop();
+		if (cleanupOptions.failed && sandbox?.keepOnFailure) {
 			return;
 		}
 		await removePath(rootPath);
 	}
 
-	return {
+	const workspace: GithubActionsWorkspace = {
 		rootPath,
 		repoPath,
 		repoName,
 		owner,
-		keepOnFailure: options.keepOnFailure ?? false,
+		keepOnFailure: sandbox?.keepOnFailure ?? false,
 		materialized: true,
-		backend:
-			typeof options.fsBackend === "object" ? options.fsBackend : undefined,
+		backend: resolveFileSystemBackend(sandbox),
 		getPath(repositoryName = repoName) {
 			return repositoryName === repoName ? repoPath : undefined;
 		},
 		async materialize() {
 			return repoPath;
 		},
+	};
+	const injector = ReflectiveInjector.resolveAndCreate(
+		[
+			{ provide: GithubActionsWorkspaceToken, useValue: workspace },
+			...(checkout
+				? [{ provide: GithubCheckoutBackendToken, useValue: checkout }]
+				: []),
+			...(options.providers ?? []),
+		],
+		options.parentInjector,
+	);
+
+	return {
+		workspace,
+		checkout,
+		injector,
+		get(token) {
+			const value = injector.get(token, missingProvider);
+			return value === missingProvider ? undefined : value;
+		},
+		require(token) {
+			const value = injector.get(token, missingProvider);
+			if (value === missingProvider) {
+				throw new PretendActError(
+					`GitHub Actions provider '${providerName(token)}' is not available.`,
+					{ code: "PRETEND_ACT_GITHUB_SERVICE_NOT_AVAILABLE" },
+				);
+			}
+			return value;
+		},
 		cleanup,
-		async dispose() {
+		async [Symbol.asyncDispose]() {
 			await cleanup();
 		},
 	};
 }
 
-export async function withMockGithub<T>(
-	options: GithubSandboxOptions,
-	callback: (sandbox: GithubSandbox) => Promise<T> | T,
-): Promise<T> {
-	const sandbox = await createGithubSandbox(options);
-	let failed = false;
-	try {
-		return await callback(sandbox);
-	} catch (error) {
-		failed = true;
-		throw error;
-	} finally {
-		await sandbox.cleanup({ failed });
-	}
+function providerName<T>(token: PretendInjectionToken<T>): string {
+	return "name" in token ? token.name : token.toString();
 }
 
+type CreateGithubCheckoutBackendOptions = {
+	checkout: Exclude<GithubRepositoryOptions["checkout"], false | undefined>;
+	checkoutRootPath: string;
+	repository: GithubRepositoryOptions;
+	repoName: string;
+	source: GithubRepositorySource;
+	workspaceFilter: WorkspaceFilterOptions;
+};
+
+async function createGithubCheckoutBackend(
+	options: CreateGithubCheckoutBackendOptions,
+): Promise<GithubCheckoutBackend> {
+	const { createGitRegistry, GitRegistryTransport } = await import(
+		"../git-registry/index"
+	);
+	return await createGitRegistry({
+		workspacePath: options.source.path,
+		rootPath: options.checkoutRootPath,
+		repoName: options.repoName,
+		defaultBranch: options.repository.defaultBranch,
+		transport: options.checkout.transport ?? GitRegistryTransport.Http,
+		http: options.checkout.http,
+		remoteUrl: options.checkout.remoteUrl,
+		sourceRef: options.checkout.sourceRef ?? options.repository.ref,
+		sourceSha: options.checkout.sourceSha ?? options.repository.sha,
+		snapshotBranch: options.checkout.snapshotBranch,
+		snapshotMessage: options.checkout.snapshotMessage,
+		workspaceFilter: mergeWorkspaceFilter(
+			options.workspaceFilter,
+			options.checkout.workspaceFilter,
+		),
+		forceSnapshot: options.checkout.forceSnapshot,
+		keepOnStop: true,
+	});
+}
+
+function resolveFileSystemBackend(
+	sandbox: GithubRepositorySandboxOptions | undefined,
+): FileSystemBackend | undefined {
+	return typeof sandbox?.fsBackend === "object" ? sandbox.fsBackend : undefined;
+}
+
+function mergeWorkspaceFilter(
+	base: WorkspaceFilterOptions | undefined,
+	override: WorkspaceFilterOptions | undefined,
+): WorkspaceFilterOptions {
+	return {
+		...base,
+		...override,
+		ignore: [...(base?.ignore ?? []), ...(override?.ignore ?? [])],
+	};
+}
 async function initializeGitRepo(
 	repoPath: string,
 	defaultBranch: string,

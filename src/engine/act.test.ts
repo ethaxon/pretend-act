@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { buildActArgs, resolveActBinary } from "./runner";
+import { buildActArgs, resolveActBinary } from "./index";
 
-describe("act runner args", () => {
+describe("act engine args", () => {
 	it("builds workflow dispatch args with inputs and container options", () => {
 		expect(
 			buildActArgs({

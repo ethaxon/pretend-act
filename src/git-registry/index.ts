@@ -46,7 +46,13 @@ export type GitRegistryOptions = {
 	keepOnStop?: boolean;
 };
 
-export type GitRegistryTransport = "file" | "http";
+export const GitRegistryTransport = {
+	File: "file",
+	Http: "http",
+} as const;
+
+export type GitRegistryTransport =
+	(typeof GitRegistryTransport)[keyof typeof GitRegistryTransport];
 
 export type GitHttpTransportCreateOptions = {
 	hostname?: string;
@@ -60,17 +66,16 @@ export type GitHttpTransportOptions = GitHttpTransportCreateOptions & {
 	repoName?: string;
 };
 
-export type GitHttpTransport = {
+export type GitHttpTransport = AsyncDisposable & {
 	repositoryPath: string;
 	remoteUrl: string;
 	hostname: string;
 	port: number;
 	pathPrefix: string;
 	stop(): Promise<void>;
-	dispose(): Promise<void>;
 };
 
-export type GitRegistry = {
+export type GitRegistry = AsyncDisposable & {
 	rootPath: string;
 	gitdir: string;
 	repositoryPath: string;
@@ -83,7 +88,6 @@ export type GitRegistry = {
 	snapshotBranch?: string;
 	snapshotWorktreePath?: string;
 	stop(): Promise<void>;
-	dispose(): Promise<void>;
 };
 
 export type CheckoutGitServerOptions = GitRegistryOptions;
@@ -91,12 +95,12 @@ export type CheckoutGitServer = GitRegistry & {
 	bareRepoPath: string;
 };
 
-export type CheckoutMockStepOptions = {
+export type CheckoutReplacementStepOptions = {
 	path?: string;
 	clean?: boolean;
 };
 
-export type CheckoutMockStep = {
+export type CheckoutReplacementStep = {
 	name: string;
 	shell: "bash";
 	run: string;
@@ -137,9 +141,9 @@ export async function createGitRegistry(
 				workspacePath,
 				sourceGitdir,
 			});
-	const transport = options.transport ?? "file";
+	const transport = options.transport ?? GitRegistryTransport.File;
 	const httpTransport =
-		transport === "http"
+		transport === GitRegistryTransport.Http
 			? await startGitHttpTransport({
 					...options.http,
 					repositoryPath,
@@ -175,7 +179,7 @@ export async function createGitRegistry(
 		snapshotBranch: result.snapshotBranch,
 		snapshotWorktreePath: result.snapshotWorktreePath,
 		stop,
-		dispose: stop,
+		[Symbol.asyncDispose]: stop,
 	};
 }
 
@@ -246,7 +250,7 @@ export async function startGitHttpTransport(
 		port: address.port,
 		pathPrefix,
 		stop,
-		dispose: stop,
+		[Symbol.asyncDispose]: stop,
 	};
 }
 
@@ -257,10 +261,10 @@ export async function createCheckoutGitServer(
 	return { ...registry, bareRepoPath: registry.repositoryPath };
 }
 
-export function createCheckoutMockStep(
+export function createCheckoutReplacementStep(
 	server: Pick<GitRegistry, "checkoutSha" | "fetchRef" | "remoteUrl">,
-	options: CheckoutMockStepOptions = {},
-): CheckoutMockStep {
+	options: CheckoutReplacementStepOptions = {},
+): CheckoutReplacementStep {
 	const githubWorkspaceParameter = "{GITHUB_WORKSPACE:-$PWD}";
 	const pathCommand = options.path
 		? `workspace="$workspace"/${shellQuote(options.path)}`

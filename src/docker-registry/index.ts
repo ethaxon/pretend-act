@@ -1,57 +1,98 @@
 import net from "node:net";
 
-import { spawnCommand } from "../core/index";
+import type Dockerode from "dockerode";
 
-export type DockerRegistryService = {
+import { importOptionalPeer } from "../core/index";
+
+type DockerodeModule = {
+	default: new (options?: Dockerode.DockerOptions) => Dockerode;
+};
+
+export type DockerRegistryService = AsyncDisposable & {
 	registryUrl: string;
 	imagePrefix: string;
 	containerName: string;
+	containerId: string;
+	container: Dockerode.Container;
 	stop(): Promise<void>;
 };
 
 export type StartDockerRegistryOptions = {
-	containerCli?: string;
+	docker?: Dockerode;
+	dockerOptions?: Dockerode.DockerOptions;
 	image?: string;
 	port?: number;
 	containerName?: string;
 	keepOnStop?: boolean;
+	pullImage?: boolean;
+	startupTimeoutMs?: number;
 };
 
 export async function startDockerRegistry(
 	options: StartDockerRegistryOptions = {},
 ): Promise<DockerRegistryService> {
-	const containerCli = options.containerCli ?? "docker";
+	const docker =
+		options.docker ?? (await createDockerode(options.dockerOptions));
+	const image = options.image ?? "registry:3";
 	const port = options.port ?? (await getFreePort());
 	const containerName =
 		options.containerName ?? `pretend-act-registry-${process.pid}-${port}`;
-	await spawnCommand({
-		command: containerCli,
-		args: [
-			"run",
-			"-d",
-			"--rm",
-			"--name",
-			containerName,
-			"-p",
-			`127.0.0.1:${port}:5000`,
-			options.image ?? "registry:3",
-		],
+	if (options.pullImage ?? true) {
+		await pullImage(docker, image);
+	}
+	const container = await docker.createContainer({
+		Image: image,
+		name: containerName,
+		ExposedPorts: { "5000/tcp": {} },
+		HostConfig: {
+			PortBindings: {
+				"5000/tcp": [{ HostIp: "127.0.0.1", HostPort: String(port) }],
+			},
+		},
 	});
+	try {
+		await container.start();
+	} catch (error) {
+		await removeContainer(container);
+		throw error;
+	}
 	const registryUrl = `127.0.0.1:${port}`;
-	await waitForRegistry(`http://${registryUrl}/v2/`);
+	try {
+		await waitForRegistry(
+			`http://${registryUrl}/v2/`,
+			options.startupTimeoutMs,
+		);
+	} catch (error) {
+		await removeContainer(container);
+		throw error;
+	}
+	async function stop() {
+		if (!options.keepOnStop) {
+			await removeContainer(container);
+		}
+	}
+
 	return {
 		registryUrl,
 		imagePrefix: registryUrl,
 		containerName,
-		async stop() {
-			if (!options.keepOnStop) {
-				await spawnCommand({
-					command: containerCli,
-					args: ["rm", "-f", containerName],
-				});
-			}
+		containerId: container.id,
+		container,
+		stop,
+		async [Symbol.asyncDispose]() {
+			await stop();
 		},
 	};
+}
+
+async function createDockerode(
+	options: Dockerode.DockerOptions | undefined,
+): Promise<Dockerode> {
+	const Dockerode = await importOptionalPeer<DockerodeModule>(
+		"dockerode",
+		"docker registry",
+	);
+	return new Dockerode.default(options);
 }
 
 export async function assertDockerRegistryReachable(
@@ -60,8 +101,8 @@ export async function assertDockerRegistryReachable(
 	await waitForRegistry(`http://${registryUrl}/v2/`);
 }
 
-async function waitForRegistry(url: string): Promise<void> {
-	const deadline = Date.now() + 15_000;
+async function waitForRegistry(url: string, timeoutMs = 15_000): Promise<void> {
+	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {
 		try {
 			const response = await fetch(url);
@@ -72,6 +113,50 @@ async function waitForRegistry(url: string): Promise<void> {
 		await new Promise((resolve) => setTimeout(resolve, 150));
 	}
 	throw new Error(`Timed out waiting for Docker registry at ${url}`);
+}
+
+async function pullImage(docker: Dockerode, image: string): Promise<void> {
+	try {
+		await docker.getImage(image).inspect();
+		return;
+	} catch {
+		const stream = await docker.pull(image);
+		await followDockerProgress(docker, stream);
+	}
+}
+
+async function followDockerProgress(
+	docker: Dockerode,
+	stream: NodeJS.ReadableStream,
+): Promise<void> {
+	await new Promise<void>((resolve, reject) => {
+		docker.modem.followProgress(stream, (error: unknown) => {
+			if (error) {
+				reject(error);
+				return;
+			}
+			resolve();
+		});
+	});
+}
+
+async function removeContainer(container: Dockerode.Container): Promise<void> {
+	try {
+		await container.remove({ force: true });
+	} catch (error) {
+		if (!isDockerNotFoundError(error)) {
+			throw error;
+		}
+	}
+}
+
+function isDockerNotFoundError(error: unknown): boolean {
+	return (
+		typeof error === "object" &&
+		error !== null &&
+		"statusCode" in error &&
+		error.statusCode === 404
+	);
 }
 
 async function getFreePort(): Promise<number> {
